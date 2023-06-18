@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-
+# Copyright (c) 2017 Greg Toombs  https://github.com/reinderien/xcalibrate.git
+# Copyright (c) 2023 Mario Ivancic  https://github.com/MarioIvancic/xcalibrate.git
 # requires python3-tk, python3-numpy
 
 import re
 import numpy as np
 from subprocess import run, PIPE
+import sys
 
 
 prop_name = 'libinput Calibration Matrix'
@@ -251,7 +253,7 @@ def use_cal(dev, new_cal):
     cal_array = [str(x)+',' for x in new_cal.flatten().tolist()[0]]
     xinput('--set-prop', str(dev), prop_name, *cal_array)
 
-def print_xorg_config(dev_name, new_cal):
+def print_xorg_config(dev_name, new_cal, file_name):
     print("Create a file (for example 99-libinput-ts-calib.conf) in /usr/share/X11/xorg.conf.d/ and put in the following")
     print()
     xorg_config = (
@@ -265,6 +267,35 @@ def print_xorg_config(dev_name, new_cal):
         " ".join(map(str, new_cal.flatten().tolist()[0]))
     )
     print(xorg_config)
+    if len(file_name) > 0:
+        with open(file_name, 'w') as f:
+            f.write(xorg_config)
+            f.close()
+
+
+def parse_args():
+    be_quiet = False
+    points = 0
+    do_test = False
+    file_name = ''
+    i = 0
+    while(i < len(sys.argv)):
+        x = sys.argv[i]
+        if(x == '-q'):
+            be_quiet = True
+        elif(x == '-n' and (i + 1) < len(sys.argv)):
+            i += 1
+            points = int(sys.argv[i])
+        elif(x == '-o' and (i + 1) < len(sys.argv)):
+            i += 1
+            file_name = sys.argv[i]
+        elif(x == '-t'):
+            do_test = True
+            
+        i += 1
+
+    return be_quiet, do_test, points, file_name
+
 
 def main():
     devs = get_devs()
@@ -274,11 +305,13 @@ def main():
     print()
 
     old_cal, old_cal_inv = read_cal(dev)
+    
+    be_quiet, do_test, num_points, file_name = parse_args()
 
     new_cal = None
-    if ask('Calibrate?'):
-        n_points = choose_points()
-        disable_rot = ask('Disable rotation?')
+    if be_quiet or ask('Calibrate?'):
+        n_points = num_points or choose_points()
+        disable_rot = be_quiet or ask('Disable rotation?')
         print()
 
         points = show_tk(n_points, old_cal_inv)
@@ -290,12 +323,12 @@ def main():
             print('Quality (should be at least 3): %.1f' % quality)
             print()
 
-    if ask('Test?'):
-        n_points = choose_points()
+    if do_test or ask('Test?'):
+        n_points = num_points or choose_points()
         show_tk(n_points, old_cal_inv, new_cal)
 
-    if new_cal is not None and ask('Use calibration?'):
+    if new_cal is not None and (be_quiet or ask('Use calibration?')):
         use_cal(dev, new_cal)
-        print_xorg_config(devs[dev], new_cal)	
+        print_xorg_config(devs[dev], new_cal, file_name)	
 
 main()
